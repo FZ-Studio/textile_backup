@@ -18,6 +18,11 @@
 
 package net.szum123321.textile_backup.core.create;
 
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.LiteralText;
+import net.minecraft.text.MutableText;
+import net.minecraft.util.Formatting;
+import net.minecraft.util.Util;
 import net.szum123321.textile_backup.Statics;
 import net.szum123321.textile_backup.core.ActionInitiator;
 import net.szum123321.textile_backup.core.create.compressors.*;
@@ -32,11 +37,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class MakeBackupRunnable implements Runnable {
     private final BackupContext context;
 
-    public MakeBackupRunnable(BackupContext context){
+    public MakeBackupRunnable(BackupContext context) {
         this.context = context;
     }
 
@@ -44,18 +50,21 @@ public class MakeBackupRunnable implements Runnable {
     public void run() {
         try {
             Utilities.disableWorldSaving(context.getServer());
+            List<ServerPlayerEntity> allPlayers = context.getServer().getPlayerManager().getPlayerList();
 
-            Statics.LOGGER.sendInfoAL(context, "Starting backup");
+            Statics.LOGGER.info("Starting backup");
+            final MutableText message0 = Statics.LOGGER.getPrefixText().shallowCopy()
+                    .append(new LiteralText("Starting backup").formatted(Formatting.WHITE));
+            allPlayers.forEach(action -> {
+                action.sendSystemMessage(message0, Util.NIL_UUID);
+            });
 
             File world = Utilities.getWorldFolder(context.getServer());
 
             Statics.LOGGER.trace("Minecraft world is: {}", world);
 
-            File outFile = Utilities
-                    .getBackupRootPath(Utilities.getLevelName(context.getServer()))
-                    .toPath()
-                    .resolve(getFileName())
-                    .toFile();
+            File outFile = Utilities.getBackupRootPath(Utilities.getLevelName(context.getServer())).toPath()
+                    .resolve(getFileName()).toFile();
 
             Statics.LOGGER.trace("Outfile is: {}", outFile);
 
@@ -66,7 +75,7 @@ public class MakeBackupRunnable implements Runnable {
             } catch (IOException e) {
                 Statics.LOGGER.error("An exception occurred when trying to create new backup file!", e);
 
-                if(context.getInitiator() == ActionInitiator.Player)
+                if (context.getInitiator() == ActionInitiator.Player)
                     Statics.LOGGER.sendError(context, "An exception occurred when trying to create new backup file!");
 
                 return;
@@ -74,17 +83,19 @@ public class MakeBackupRunnable implements Runnable {
 
             int coreCount;
 
-            if(Statics.CONFIG.compressionCoreCountLimit <= 0) {
+            if (Statics.CONFIG.compressionCoreCountLimit <= 0) {
                 coreCount = Runtime.getRuntime().availableProcessors();
             } else {
-                coreCount = Math.min(Statics.CONFIG.compressionCoreCountLimit, Runtime.getRuntime().availableProcessors());
+                coreCount = Math.min(Statics.CONFIG.compressionCoreCountLimit,
+                        Runtime.getRuntime().availableProcessors());
             }
 
-            Statics.LOGGER.trace("Running compression on {} threads. Available cores: {}", coreCount, Runtime.getRuntime().availableProcessors());
+            Statics.LOGGER.trace("Running compression on {} threads. Available cores: {}", coreCount,
+                    Runtime.getRuntime().availableProcessors());
 
             switch (Statics.CONFIG.format) {
                 case ZIP: {
-                    if(Statics.tmpAvailable && coreCount > 1)
+                    if (Statics.tmpAvailable && coreCount > 1)
                         ParallelZipCompressor.getInstance().createArchive(world, outFile, context, coreCount);
                     else
                         ZipCompressor.getInstance().createArchive(world, outFile, context, coreCount);
@@ -105,35 +116,43 @@ public class MakeBackupRunnable implements Runnable {
 
                 case TAR:
                     new AbstractTarArchiver() {
-                        protected OutputStream getCompressorOutputStream(OutputStream stream, BackupContext ctx, int coreLimit) {
+                        protected OutputStream getCompressorOutputStream(OutputStream stream, BackupContext ctx,
+                                int coreLimit) {
                             return stream;
                         }
                     }.createArchive(world, outFile, context, coreCount);
                     break;
 
                 default:
-                    Statics.LOGGER.warn("Specified compressor ({}) is not supported! Zip will be used instead!", Statics.CONFIG.format);
+                    Statics.LOGGER.warn("Specified compressor ({}) is not supported! Zip will be used instead!",
+                            Statics.CONFIG.format);
 
-                    if(context.getInitiator() == ActionInitiator.Player)
-                        Statics.LOGGER.sendError(context.getCommandSource(), "Error! No correct compression format specified! Using default compressor!");
+                    if (context.getInitiator() == ActionInitiator.Player)
+                        Statics.LOGGER.sendError(context.getCommandSource(),
+                                "Error! No correct compression format specified! Using default compressor!");
 
                     ZipCompressor.getInstance().createArchive(world, outFile, context, coreCount);
                     break;
             }
 
             BackupHelper.executeFileLimit(context.getCommandSource(), Utilities.getLevelName(context.getServer()));
+            final MutableText message1 = Statics.LOGGER.getPrefixText().shallowCopy()
+                    .append(new LiteralText("Done!").formatted(Formatting.WHITE));
+            allPlayers.forEach(action -> {
+                action.sendSystemMessage(message1, Util.NIL_UUID);
+            });
+            Statics.LOGGER.info("Done!");
 
-            Statics.LOGGER.sendInfoAL(context, "Done!");
         } finally {
             Utilities.enableWorldSaving(context.getServer());
         }
     }
 
-    private String getFileName(){
+    private String getFileName() {
         LocalDateTime now = LocalDateTime.now();
 
-        return Utilities.getDateTimeFormatter().format(now) +
-                (context.getComment() != null ? "#" + context.getComment().replace("#", "") : "") +
-                Statics.CONFIG.format.getCompleteString();
+        return Utilities.getDateTimeFormatter().format(now)
+                + (context.getComment() != null ? "#" + context.getComment().replace("#", "") : "")
+                + Statics.CONFIG.format.getCompleteString();
     }
 }

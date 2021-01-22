@@ -103,6 +103,6 @@ public class RestoreBackupRunnable implements Runnable {
             state = f.delete();
         }
 
-        return  state;
+        return state;
     }
 }

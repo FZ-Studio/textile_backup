@@ -24,6 +24,10 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.text.LiteralText;
+import net.minecraft.text.MutableText;
+import net.minecraft.util.Formatting;
+import net.minecraft.util.Util;
 import net.szum123321.textile_backup.commands.CommandExceptions;
 import net.szum123321.textile_backup.Statics;
 import net.szum123321.textile_backup.commands.FileSuggestionProvider;
@@ -40,8 +44,7 @@ public class DeleteCommand {
         return CommandManager.literal("delete")
                 .then(CommandManager.argument("file", StringArgumentType.word())
                         .suggests(FileSuggestionProvider.Instance())
-                        .executes(ctx -> execute(ctx.getSource(), StringArgumentType.getString(ctx, "file")))
-                );
+                        .executes(ctx -> execute(ctx.getSource(), StringArgumentType.getString(ctx, "file"))));
     }
 
     private static int execute(ServerCommandSource source, String fileName) throws CommandSyntaxException {
@@ -55,18 +58,28 @@ public class DeleteCommand {
 
         File root = Utilities.getBackupRootPath(Utilities.getLevelName(source.getMinecraftServer()));
 
-        Optional<File> optionalFile =  Arrays.stream(root.listFiles())
-                .filter(Utilities::isValidBackup)
+        Optional<File> optionalFile = Arrays.stream(root.listFiles()).filter(Utilities::isValidBackup)
                 .filter(file -> Utilities.getFileCreationTime(file).orElse(LocalDateTime.MIN).equals(dateTime))
                 .findFirst();
 
-        if(optionalFile.isPresent()) {
-            if(Statics.untouchableFile == null || (Statics.untouchableFile != null && !Statics.untouchableFile.equals(optionalFile.get()))) {
-                if(optionalFile.get().delete()) {
-                    Statics.LOGGER.sendInfo(source, "File {} successfully deleted!", optionalFile.get().getName());
+        if (optionalFile.isPresent()) {
+            if (Statics.untouchableFile == null
+                    || (Statics.untouchableFile != null && !Statics.untouchableFile.equals(optionalFile.get()))) {
+                if (optionalFile.get().delete()) {
 
-                    if(source.getEntity() instanceof PlayerEntity)
-                        Statics.LOGGER.info("Player {} deleted {}.", source.getPlayer().getName(), optionalFile.get().getName());
+                    final MutableText message0 = Statics.LOGGER.getPrefixText().shallowCopy()
+                            .append(new LiteralText("File " + optionalFile.get().getName() + " successfully deleted!")
+                                    .formatted(Formatting.WHITE));
+                    source.getMinecraftServer().getPlayerManager().getPlayerList().forEach(action -> {
+                        action.sendSystemMessage(message0, Util.NIL_UUID);
+                    });
+
+                    if (source.getEntity() instanceof PlayerEntity) {
+                        Statics.LOGGER.info("Player {} deleted {}.", source.getPlayer().getName().getString(),
+                                optionalFile.get().getName());
+                    } else {
+                        Statics.LOGGER.info("File {} successfully deleted!", optionalFile.get().getName());
+                    }
                 } else {
                     Statics.LOGGER.sendError(source, "Something went wrong while deleting file!");
                 }

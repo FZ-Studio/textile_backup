@@ -20,10 +20,12 @@ package net.szum123321.textile_backup.core.create;
 
 import net.minecraft.network.MessageType;
 import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.MutableText;
+import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import net.szum123321.textile_backup.Statics;
@@ -37,6 +39,7 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackupHelper {
@@ -49,7 +52,7 @@ public class BackupHelper {
 
 		builder.append(ctx.getInitiator().getPrefix());
 
-		if(ctx.startedByPlayer()) {
+		if (ctx.startedByPlayer()) {
 			builder.append(ctx.getCommandSource().getDisplayName().getString());
 		} else {
 			builder.append(ctx.getInitiator().getName());
@@ -61,52 +64,57 @@ public class BackupHelper {
 		Statics.LOGGER.info(builder.toString());
 
 		if (ctx.shouldSave()) {
-			Statics.LOGGER.sendInfoAL(ctx, "Saving server...");
+
+			final MutableText message0 = Statics.LOGGER.getPrefixText().shallowCopy()
+					.append(new LiteralText("Saving server...").formatted(Formatting.WHITE));
+
+			Statics.LOGGER.info("Saving server...");
+			List<ServerPlayerEntity> allPlayers = ctx.getServer().getPlayerManager().getPlayerList();
+			allPlayers.forEach(action -> {
+				action.sendSystemMessage(message0, Util.NIL_UUID);
+			});
 
 			ctx.getServer().getPlayerManager().saveAllPlayerData();
 
 			try {
 				ctx.getServer().save(false, true, true);
 			} catch (Exception e) {
-				Statics.LOGGER.sendErrorAL(ctx,"An exception occurred when trying to save the world!\n"
-						+ "But don't worry, backup will continue, although data may be not up-to-date."
-				);
+				Statics.LOGGER.info("An exception occurred when trying to save the world!\n"
+						+ "But don't worry, backup will continue, although data may be not up-to-date.");
+				MutableText text = Statics.LOGGER.getPrefixText().shallowCopy()
+						.append("An exception occurred when trying to save the world!\n"
+								+ "But don't worry, backup will continue, although data may be not up-to-date.");
 
-				MutableText text = Statics.LOGGER.getPrefixText()
-						.shallowCopy()
-						.append(new LiteralText("In order for backup to be up-to-date call ").formatted(Formatting.WHITE))
-						.append(
-								new LiteralText("[/save-all flush]")
-										.styled(
-												style -> style
-														.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/save-all flush"))
-														.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText("Click!")))
-														.withColor(Formatting.BLUE)
-										)
-						)
+				ctx.getCommandSource().sendFeedback(text, false);
+
+				text = Statics.LOGGER.getPrefixText().shallowCopy()
+						.append(new LiteralText("In order for backup to be up-to-date call ")
+								.formatted(Formatting.WHITE))
+						.append(new LiteralText("[/save-all flush]").styled(style -> style
+								.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/save-all flush"))
+								.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText("Click!")))
+								.withColor(Formatting.BLUE)))
 						.append(new LiteralText(" and then re-run the backup.").formatted(Formatting.WHITE));
 
 				ctx.getCommandSource().sendFeedback(text, false);
 
-				text = Statics.LOGGER.getPrefixText()
-						.shallowCopy()
+				text = Statics.LOGGER.getPrefixText().shallowCopy()
 						.append(new LiteralText("This is known issue (See ").formatted(Formatting.WHITE))
-						.append(
-								new LiteralText("https://github.com/Szum123321/textile_backup/issues/42")
-									.styled(
-											style -> style
-													.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Szum123321/textile_backup/issues/42"))
-													.withColor(Formatting.BLUE)
-									)
-						)
+						.append(new LiteralText("https://github.com/Szum123321/textile_backup/issues/42")
+								.styled(style -> style
+										.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL,
+												"https://github.com/Szum123321/textile_backup/issues/42"))
+										.withColor(Formatting.BLUE)))
 						.append(new LiteralText(")").formatted(Formatting.WHITE));
 
 				ctx.getCommandSource().sendFeedback(text, false);
-				
-				if(ctx.startedByPlayer())
+
+				if (ctx.startedByPlayer())
 					Statics.LOGGER.sendError(ctx, "If you have access to server console please take a look at it.");
 
-				Statics.LOGGER.error("Please let me know about this situation, include below error, mod's config, additional mods, where is the server running etc.", e);
+				Statics.LOGGER.error(
+						"Please let me know about this situation, include below error, mod's config, additional mods, where is the server running etc.",
+						e);
 			}
 		}
 
@@ -114,14 +122,17 @@ public class BackupHelper {
 	}
 
 	private static void notifyPlayers(BackupContext ctx) {
-		MutableText message = Statics.LOGGER.getPrefixText().shallowCopy();
-		message.append(new LiteralText("Warning! Server backup will begin shortly. You may experience some lag.").formatted(Formatting.WHITE));
+		MutableText message = Statics.LOGGER.getPrefixText().shallowCopy()
+				.append(new LiteralText("Warning! Server backup will begin shortly. You may experience some lag.")
+						.formatted(Formatting.WHITE));
 
-		ctx.getServer().getPlayerManager().broadcastChatMessage(
-				message,
-				MessageType.GAME_INFO,
-				ctx.getInitiator() == ActionInitiator.Player ? ctx.getCommandSource().getEntity().getUuid() : Util.NIL_UUID
-		);
+		ctx.getServer().getPlayerManager().getPlayerList().forEach(action -> {
+			action.sendSystemMessage(message, Util.NIL_UUID);
+		});
+
+		ctx.getServer().getPlayerManager().broadcastChatMessage(message, MessageType.GAME_INFO,
+				ctx.getInitiator() == ActionInitiator.Player ? ctx.getCommandSource().getEntity().getUuid()
+						: Util.NIL_UUID);
 	}
 
 	public static int executeFileLimit(ServerCommandSource ctx, String worldName) {
@@ -132,11 +143,13 @@ public class BackupHelper {
 			if (Statics.CONFIG.maxAge > 0) { // delete files older that configured
 				final LocalDateTime now = LocalDateTime.now();
 
-				Arrays.stream(root.listFiles())
-						.filter(Utilities::isValidBackup)// We check if we can get file's creation date so that the next line won't throw an exception
-						.filter(f -> now.toEpochSecond(ZoneOffset.UTC) - Utilities.getFileCreationTime(f).get().toEpochSecond(ZoneOffset.UTC) > Statics.CONFIG.maxAge)
+				Arrays.stream(root.listFiles()).filter(Utilities::isValidBackup)// We check if we can get file's
+																				// creation date so that the next line
+																				// won't throw an exception
+						.filter(f -> now.toEpochSecond(ZoneOffset.UTC) - Utilities.getFileCreationTime(f).get()
+								.toEpochSecond(ZoneOffset.UTC) > Statics.CONFIG.maxAge)
 						.forEach(f -> {
-							if(deleteFile(f, ctx))
+							if (deleteFile(f, ctx))
 								deletedFiles.getAndIncrement();
 						});
 			}
@@ -144,13 +157,11 @@ public class BackupHelper {
 			if (Statics.CONFIG.backupsToKeep > 0 && root.listFiles().length > Statics.CONFIG.backupsToKeep) {
 				int i = root.listFiles().length;
 
-				Iterator<File> it = Arrays.stream(root.listFiles())
-						.filter(Utilities::isValidBackup)
-						.sorted(Comparator.comparing(f -> Utilities.getFileCreationTime(f).get()))
-						.iterator();
+				Iterator<File> it = Arrays.stream(root.listFiles()).filter(Utilities::isValidBackup)
+						.sorted(Comparator.comparing(f -> Utilities.getFileCreationTime(f).get())).iterator();
 
-				while(i > Statics.CONFIG.backupsToKeep && it.hasNext()) {
-					if(deleteFile(it.next(), ctx))
+				while (i > Statics.CONFIG.backupsToKeep && it.hasNext()) {
+					if (deleteFile(it.next(), ctx))
 						deletedFiles.getAndIncrement();
 
 					i--;
@@ -158,13 +169,11 @@ public class BackupHelper {
 			}
 
 			if (Statics.CONFIG.maxSize > 0 && FileUtils.sizeOfDirectory(root) / 1024 > Statics.CONFIG.maxSize) {
-				Iterator<File> it = Arrays.stream(root.listFiles())
-						.filter(Utilities::isValidBackup)
-						.sorted(Comparator.comparing(f -> Utilities.getFileCreationTime(f).get()))
-						.iterator();
+				Iterator<File> it = Arrays.stream(root.listFiles()).filter(Utilities::isValidBackup)
+						.sorted(Comparator.comparing(f -> Utilities.getFileCreationTime(f).get())).iterator();
 
-				while(FileUtils.sizeOfDirectory(root) / 1024 > Statics.CONFIG.maxSize && it.hasNext()) {
-					if(deleteFile(it.next(), ctx))
+				while (FileUtils.sizeOfDirectory(root) / 1024 > Statics.CONFIG.maxSize && it.hasNext()) {
+					if (deleteFile(it.next(), ctx))
 						deletedFiles.getAndIncrement();
 				}
 			}
@@ -174,8 +183,8 @@ public class BackupHelper {
 	}
 
 	private static boolean deleteFile(File f, ServerCommandSource ctx) {
-		if(!Statics.untouchableFile.equals(f)) {
-			if(f.delete()) {
+		if (!Statics.untouchableFile.equals(f)) {
+			if (f.delete()) {
 				Statics.LOGGER.sendInfoAL(ctx, "Deleting: {}", f.getName());
 				return true;
 			} else {

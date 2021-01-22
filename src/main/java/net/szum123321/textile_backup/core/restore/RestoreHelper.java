@@ -18,9 +18,13 @@
 
 package net.szum123321.textile_backup.core.restore;
 
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.MessageType;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.text.LiteralText;
 import net.minecraft.text.MutableText;
+import net.minecraft.text.TranslatableText;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import net.szum123321.textile_backup.ConfigHandler;
 import net.szum123321.textile_backup.Statics;
@@ -41,11 +45,9 @@ public class RestoreHelper {
     public static Optional<RestoreableFile> findFileAndLockIfPresent(LocalDateTime backupTime, MinecraftServer server) {
         File root = Utilities.getBackupRootPath(Utilities.getLevelName(server));
 
-        Optional<RestoreableFile> optionalFile =  Arrays.stream(root.listFiles())
-                .map(RestoreableFile::newInstance)
+        Optional<RestoreableFile> optionalFile = Arrays.stream(root.listFiles()).map(RestoreableFile::newInstance)
                 .flatMap(o -> o.map(Stream::of).orElseGet(Stream::empty))
-                .filter(rf -> rf.getCreationTime().equals(backupTime))
-                .findFirst();
+                .filter(rf -> rf.getCreationTime().equals(backupTime)).findFirst();
 
         optionalFile.ifPresent(file -> Statics.untouchableFile = file.getFile());
 
@@ -53,38 +55,38 @@ public class RestoreHelper {
     }
 
     public static AwaitThread create(RestoreContext ctx) {
-        if(ctx.getInitiator() == ActionInitiator.Player)
+        if (ctx.getInitiator() == ActionInitiator.Player)
             Statics.LOGGER.info("Backup restoration was initiated by: {}", ctx.getCommandSource().getName());
         else
             Statics.LOGGER.info("Backup restoration was initiated form Server Console");
 
         notifyPlayer(ctx);
 
-        return new AwaitThread(
-                Statics.CONFIG.restoreDelay,
-                new RestoreBackupRunnable(ctx)
-        );
+        return new AwaitThread(Statics.CONFIG.restoreDelay, new RestoreBackupRunnable(ctx),
+                ctx.getServer().getPlayerManager().getPlayerList());
     }
 
     private static void notifyPlayer(RestoreContext ctx) {
-        MutableText message = Statics.LOGGER.getPrefixText().shallowCopy();
-        message.append("Warning! The server is going to shut down in " + Statics.CONFIG.restoreDelay + " seconds!");
 
-        ctx.getServer().getPlayerManager().broadcastChatMessage(
-                message,
-                MessageType.GAME_INFO,
-                ctx.getInitiator() == ActionInitiator.Player ? ctx.getCommandSource().getEntity().getUuid() : Util.NIL_UUID
-        );
+        MutableText message = Statics.LOGGER.getPrefixText().shallowCopy()
+                .append(new LiteralText(
+                        "Warning! The server is going to shut down in " + Statics.CONFIG.restoreDelay + " seconds!")
+                                .formatted(Formatting.WHITE));
+
+        ctx.getServer().getPlayerManager().getPlayerList().forEach(action -> {
+            action.sendSystemMessage(message, Util.NIL_UUID);
+        });
+
+        ctx.getServer().getPlayerManager().broadcastChatMessage(message, MessageType.GAME_INFO,
+                ctx.getInitiator() == ActionInitiator.Player ? ctx.getCommandSource().getEntity().getUuid()
+                        : Util.NIL_UUID);
     }
 
     public static List<RestoreableFile> getAvailableBackups(MinecraftServer server) {
         File root = Utilities.getBackupRootPath(Utilities.getLevelName(server));
 
-        return Arrays.stream(root.listFiles())
-                .filter(Utilities::isValidBackup)
-                .map(RestoreableFile::newInstance)
-                .flatMap(o -> o.map(Stream::of).orElseGet(Stream::empty))
-                .collect(Collectors.toList());
+        return Arrays.stream(root.listFiles()).filter(Utilities::isValidBackup).map(RestoreableFile::newInstance)
+                .flatMap(o -> o.map(Stream::of).orElseGet(Stream::empty)).collect(Collectors.toList());
     }
 
     public static class RestoreableFile implements Comparable<RestoreableFile> {
@@ -95,13 +97,15 @@ public class RestoreHelper {
 
         private RestoreableFile(File file) throws NoSuchElementException {
             this.file = file;
-            archiveFormat = Utilities.getArchiveExtension(file).orElseThrow(() -> new NoSuchElementException("Couldn't get file extension!"));
+            archiveFormat = Utilities.getArchiveExtension(file)
+                    .orElseThrow(() -> new NoSuchElementException("Couldn't get file extension!"));
             String extension = archiveFormat.getCompleteString();
-            creationTime = Utilities.getFileCreationTime(file).orElseThrow(() -> new NoSuchElementException("Couldn't get file creation time!"));
+            creationTime = Utilities.getFileCreationTime(file)
+                    .orElseThrow(() -> new NoSuchElementException("Couldn't get file creation time!"));
 
             final String filename = file.getName();
 
-            if(filename.split("#").length > 1) {
+            if (filename.split("#").length > 1) {
                 this.comment = filename.split("#")[1].split(extension)[0];
             } else {
                 this.comment = null;
@@ -111,7 +115,8 @@ public class RestoreHelper {
         public static Optional<RestoreableFile> newInstance(File file) {
             try {
                 return Optional.of(new RestoreableFile(file));
-            } catch (NoSuchElementException ignored) {}
+            } catch (NoSuchElementException ignored) {
+            }
 
             return Optional.empty();
         }
@@ -138,7 +143,8 @@ public class RestoreHelper {
         }
 
         public String toString() {
-            return this.getCreationTime().format(Statics.defaultDateTimeFormatter) + (comment != null ? "#" + comment : "");
+            return this.getCreationTime().format(Statics.defaultDateTimeFormatter)
+                    + (comment != null ? "#" + comment : "");
         }
     }
 }
