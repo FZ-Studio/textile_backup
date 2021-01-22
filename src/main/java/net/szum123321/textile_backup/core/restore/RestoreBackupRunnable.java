@@ -98,9 +98,11 @@ public class RestoreBackupRunnable implements Runnable {
 
         if(f.isDirectory()) {
             for(File f2 : f.listFiles())
-                state &= deleteDirectory(f2);
+                state = deleteDirectory(f2);
+        } else {
+            state = f.delete();
         }
 
-        return f.delete() && state;
+        return  state;
     }
 }

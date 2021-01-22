@@ -43,7 +43,8 @@ public class ParallelZipCompressor extends ZipCompressor {
 	}
 
 	@Override
-	protected OutputStream createArchiveOutputStream(OutputStream stream, BackupContext ctx, int coreLimit) {
+	protected OutputStream createArchiveOutputStream(OutputStream stream, BackupContext ctx, int coreLimit)
+			throws IOException {
 		scatterZipCreator = new ParallelScatterZipCreator(Executors.newFixedThreadPool(coreLimit));
 		return super.createArchiveOutputStream(stream, ctx, coreLimit);
 	}
